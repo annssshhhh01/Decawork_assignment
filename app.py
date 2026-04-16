@@ -63,7 +63,7 @@ def _save_users(users):
         json.dump(users, f, indent=2)
 
 # Live mutable list — updated by agent actions and persisted immediately
-_ADMIN_USERS = _load_users()
+# Loaded dynamically per request to prevent Gunicorn worker desync
 
 app = Flask(__name__)
 app.config['SERVER_NAME'] = None
@@ -246,7 +246,7 @@ def index():
 @app.route("/admin", methods=["GET"])
 def admin():
     """Render the agent-facing admin panel UI."""
-    return render_template("admin.html", users=_ADMIN_USERS)
+    return render_template("admin.html", users=_load_users())
 
 
 @app.route("/api/toggle_user", methods=["POST"])
@@ -254,10 +254,12 @@ def api_toggle_user():
     """Toggle user status and PERSIST to disk so changes survive restarts."""
     data = request.get_json(force=True, silent=True) or {}
     email = data.get("email", "").lower()
-    for u in _ADMIN_USERS:
+    
+    users = _load_users()
+    for u in users:
         if u["email"].lower() == email:
             u["status"] = "inactive" if u["status"] == "active" else "active"
-            _save_users(_ADMIN_USERS)   # <-- write to disk immediately
+            _save_users(users)   # <-- write to disk immediately
             return jsonify({"status": "success", "new_status": u["status"]})
     return jsonify({"error": "not found"}), 404
 
@@ -267,12 +269,12 @@ def api_delete_user():
     data = request.get_json(force=True, silent=True) or {}
     email = data.get("email", "").lower().strip()
     
-    global _ADMIN_USERS
-    initial_length = len(_ADMIN_USERS)
-    _ADMIN_USERS = [u for u in _ADMIN_USERS if u["email"].lower().strip() != email]
+    users = _load_users()
+    initial_length = len(users)
+    users = [u for u in users if u["email"].lower().strip() != email]
     
-    if len(_ADMIN_USERS) < initial_length:
-        _save_users(_ADMIN_USERS)
+    if len(users) < initial_length:
+        _save_users(users)
         return jsonify({"status": "success"})
     return jsonify({"error": "not found"}), 404
 
