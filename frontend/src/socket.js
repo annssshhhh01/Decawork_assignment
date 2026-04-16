@@ -1,9 +1,8 @@
-import { io } from 'socket.io-client'
+import { io } from "socket.io-client";
 
-// Singleton — imported and shared across the entire app
-const socket = io('http://localhost:5000', {
+const socket = io("https://decawork-assignment.onrender.com", {
+  transports: ["websocket"],
   autoConnect: true,
-  transports: ['websocket', 'polling'],
-})
+});
 
-export default socket
+export default socket;
