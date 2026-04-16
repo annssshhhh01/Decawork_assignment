@@ -71,53 +71,58 @@ def _build_enriched_prompt(task: str, admin_url: str) -> str:
     lower = task.lower()
 
     if "reset password" in lower:
-        target = lower
+        target = task
         for prefix in ["reset password for ", "reset password of ", "reset the password for ", "reset pass for "]:
-            if target.startswith(prefix):
+            if lower.startswith(prefix):
                 target = task[len(prefix):].strip()
                 break
 
-        # Strip any @{{...}} wrapping injected by wrap_params
-        target = re.sub(r"@\{\{(.+?)\}\}", r"\1", target)
-
         return (
-            f"Task: Reset the password for '{target}'.\n"
-            f"Goal: A green banner must appear on screen confirming the reset.\n"
-            f"Strategy:\n"
-            f"1. Open {admin_url}.\n"
-            f"2. Click the 'Search user' input and type '{target}'. This should filter the table to one row.\n"
+            f"Task: Reset password for a user.\n\n"
+            f"Target email: {target}\n\n"
+            f"Goal:\n"
+            f"A green success banner must appear.\n\n"
+            f"Steps:\n"
+            f"1. Open the admin panel at {admin_url}.\n"
+            f"2. Find the row with the target email (use the 'Search user' input).\n"
             f"3. Click the 'Reset Password' button in that row.\n"
-            f"4. A modal will appear. Click the button inside it that says 'Confirm Reset Password'.\n"
-            f"5. Wait for the green banner at the top of the page. Read and return its text.\n"
-            f"Constraints: Return the exact banner text when it appears. If the user is not found in the table, return 'USER_NOT_FOUND'."
+            f"4. A modal will appear. Click the confirm button.\n"
+            f"5. Read success banner.\n\n"
+            f"Constraints:\n"
+            f"Return the exact banner text when it appears. If the user is not found in the table, return 'USER_NOT_FOUND'. Do not hallucinate. Only act on visible UI."
         )
 
     if "disable" in lower or "enable" in lower:
-        target = lower
+        target = task
         for prefix in ["disable account for ", "enable account for ", "disable ", "enable "]:
-            if target.startswith(prefix):
+            if lower.startswith(prefix):
                 target = task[len(prefix):].strip()
                 break
 
-        # Strip any @{{...}} wrapping injected by wrap_params
-        target = re.sub(r"@\{\{(.+?)\}\}", r"\1", target)
-
-        action = "Disable" if "disable" in lower else "Enable"
+        action_cmd = "Disable" if "disable" in lower else "Enable"
+        
         return (
-            f"Task: {action} the account for '{target}'.\n"
-            f"Goal: The user's status badge must change and a green banner must appear.\n"
-            f"Strategy:\n"
-            f"1. Open {admin_url}.\n"
-            f"2. Click the 'Search user' input and type '{target}'. This should filter the table to one row.\n"
-            f"3. Click the '{action}' button in that row.\n"
-            f"4. Wait for the green banner at the top of the page. Read and return its text.\n"
-            f"Constraints: Return the exact banner text when it appears. If the user is not found, return 'USER_NOT_FOUND'."
+            f"Task: {action_cmd} account for a user.\n\n"
+            f"Target email: {target}\n\n"
+            f"Goal:\n"
+            f"A green success banner must appear.\n\n"
+            f"Steps:\n"
+            f"1. Open the admin panel at {admin_url}.\n"
+            f"2. Find the row with the target email (use the 'Search user' input).\n"
+            f"3. Click the '{action_cmd}' button in that row.\n"
+            f"4. Read success banner.\n\n"
+            f"Constraints:\n"
+            f"Return the exact banner text when it appears. If the user is not found, return 'USER_NOT_FOUND'. Do not hallucinate. Only act on visible UI."
         )
 
     return (
-        f"Task: {task}\n"
-        f"Strategy: Open {admin_url} and complete the task visually.\n"
-        f"Constraints: Return the result text visible on screen after completing the task."
+        f"Task: Execute requested objective.\n\n"
+        f"Objective parameter: {task}\n\n"
+        f"Steps:\n"
+        f"1. Open {admin_url}.\n"
+        f"2. Complete the objective visually.\n\n"
+        f"Constraints:\n"
+        f"Return the result text visible on screen after completing the task. Do not hallucinate. Only act on visible UI."
     )
 
 
