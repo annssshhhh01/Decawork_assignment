@@ -225,7 +225,7 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
             "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'.\n"
-            "CRITICAL: Output NOTHING EXCEPT the exact banner text or 'USER_NOT_FOUND'. Do NOT add any markdown, prose, explanation, or rationale. Do NOT hardcode the user's name in validation logic. Just return the banner text. Do not hallucinate."
+            "CRITICAL: Output NOTHING EXCEPT the exact banner text, 'USER_NOT_FOUND', or 'USER_ALREADY_DISABLED'. Do NOT add any markdown, prose, explanation, or rationale. Do NOT hardcode the user's name in validation logic. Just return the correct status string. Do not hallucinate."
         )
 
     if task_type == "enable_account":
@@ -241,8 +241,8 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "4. If the button says 'Enable', click it.\n"
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
-            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
-            "Do not hallucinate. Only act on visible UI."
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'.\n"
+            "CRITICAL: Output NOTHING EXCEPT the exact banner text, 'USER_NOT_FOUND', or 'USER_ALREADY_ENABLED'. Do NOT add any markdown, prose, explanation, or rationale. Do NOT hardcode the user's name in validation logic. Just return the correct status string. Do not hallucinate."
         )
 
     # Generic fallback — no user prose injected; admin_url only
