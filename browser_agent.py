@@ -13,16 +13,31 @@ _WORKSPACE_NAME = "decawork-it-helpdesk"
 
 
 # ---------------------------------------------------------------------------
-# Parameter extraction  — regex only, ignores all surrounding words
+# Parameter extraction  — regex is the ONLY source for email values
 # ---------------------------------------------------------------------------
 
-# Strict RFC-5321-flavoured email pattern — never captures prose words
-_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+# Strict email-only regex — anchored to word boundaries, no spaces possible
+_EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b")
 
 def extract_email(raw: str) -> str | None:
-    """Return the first valid email found in raw input, or None."""
+    """
+    Extract and clean the first valid email from raw input.
+
+    Double-validates: runs regex on the match itself to guarantee
+    no surrounding prose leaks through (e.g. 'this account eva@co.com').
+    Always returns a lowercase, whitespace-free email string or None.
+    """
     m = _EMAIL_RE.search(raw)
-    return m.group(0).lower() if m else None
+    if not m:
+        return None
+    candidate = m.group(0).strip().lower()
+    # Sanity: re-validate the candidate — must still be a clean email
+    if not _EMAIL_RE.fullmatch(candidate):
+        return None
+    # Hard guard: a valid email NEVER contains a space
+    if " " in candidate:
+        return None
+    return candidate
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +52,9 @@ _INTENT_MAP: list[tuple[str, list[str]]] = [
     ("disable_account", ["disable"]),
     ("enable_account",  ["enable",  "reactivate", "unblock"]),
 ]
+
+# Action task types that REQUIRE an email — generic tasks do not
+_ACTION_TYPES = {"reset_password", "disable_account", "enable_account"}
 
 def detect_task_type(raw: str) -> str:
     """
@@ -57,30 +75,46 @@ def detect_task_type(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Preprocessing pipeline  — single entry point used by run_task
+# Preprocessing pipeline  — SINGLE entry point, raw input never leaves here
 # ---------------------------------------------------------------------------
+
+class ParseError(ValueError):
+    """Raised when input cannot be safely parsed into a clean (task_type, param)."""
 
 def parse_input(raw: str) -> tuple[str, str]:
     """
-    Converts free-form user input into a (task_type, param) pair.
+    Convert free-form user input into a (task_type, clean_email) pair.
 
-    The raw sentence is DISCARDED after this function — only the
-    stable task_type and the clean extracted email are passed forward,
-    which guarantees the prompt template is always identical.
+    CONTRACT:
+      - The raw sentence is DISCARDED here — it NEVER reaches the prompt builder.
+      - For action tasks (disable/enable/reset) an email is REQUIRED.
+        If no clean email is found, ParseError is raised and the LLM is NOT called.
+      - 'param' returned is ONLY the extracted email — no surrounding words.
     """
     task_type = detect_task_type(raw)
     email     = extract_email(raw)
-    param     = email if email else raw.strip()
 
-    # ── Debug audit ───────────────────────────────────────────────────────
+    # ── Debug audit (logged before any validation) ────────────────────────
     print(f"\n[PARSE] RAW INPUT      : {raw}")
-    print(f"[PARSE] EXTRACTED EMAIL: {email}")
     print(f"[PARSE] TASK TYPE      : {task_type}")
-    print(f"[PARSE] PARAM (to prompt): {param}")
-    # ──────────────────────────────────────────────────────────────────────
+    print(f"[PARSE] EXTRACTED EMAIL: {email}")
+    # ─────────────────────────────────────────────────────────────────────
 
+    if task_type in _ACTION_TYPES:
+        if not email:
+            raise ParseError(
+                f"No valid email found in input for task type '{task_type}'. "
+                "Please include an email address."
+            )
+        # Sanity assertion: param must be a bare email, no spaces, no prose
+        assert " " not in email, f"[BUG] email contains spaces: {email!r}"
+        param = email
+    else:
+        # Generic task — param is the raw task text (no email required)
+        param = raw.strip()
+
+    print(f"[PARSE] FINAL PARAM    : {param}")
     return task_type, param
-
 
 
 # ---------------------------------------------------------------------------
@@ -188,18 +222,28 @@ async def run_task(task: str, on_progress=None) -> dict:
 
     ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:5000/admin")
 
-    # ── Single preprocessing entry point ────────────────────────────────────
-    # parse_input() discards the raw sentence; only (task_type, clean_email) survive.
-    task_type, param = parse_input(task)
+    # ── HARD SEPARATION: raw input is consumed here and never used again ────
+    try:
+        task_type, param = parse_input(task)
+    except ParseError as exc:
+        print(f"[PARSE] ❌ PARSE ERROR: {exc}")
+        return {
+            "status":    "error",
+            "output":    str(exc),
+            "steps":     0,
+            "cache_hit": False,
+            "elapsed_s": round(time.perf_counter() - t_start, 2),
+        }
+    # ────────────────────────────────────────────────────────────────────────
 
     prompt = _build_enriched_prompt(task_type, param, ADMIN_URL).strip()
 
     # ── Prompt stability audit ───────────────────────────────────────────────
     prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
     print(f"[CACHE] PROMPT HASH    : {prompt_hash}")
+    print(f"[CACHE] FINAL EMAIL    : {param}")
     print(f"[CACHE] PROMPT CONTENT :\n{prompt}\n")
     # ────────────────────────────────────────────────────────────────────────
-
 
     client = AsyncBrowserUse()
 
