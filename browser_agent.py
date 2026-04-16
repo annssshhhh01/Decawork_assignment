@@ -1,6 +1,8 @@
 import asyncio
+import hashlib
 import os
 import re
+import time
 from dotenv import load_dotenv
 from browser_use_sdk.v3 import AsyncBrowserUse
 
@@ -138,6 +140,8 @@ def _build_enriched_prompt(task_type: str, param: str, admin_url: str) -> str:
 # ---------------------------------------------------------------------------
 
 async def run_task(task: str, on_progress=None) -> dict:
+    t_start = time.perf_counter()
+
     print("\n" + "=" * 60)
     print(f"Task: {task}")
     print("=" * 60)
@@ -150,7 +154,12 @@ async def run_task(task: str, on_progress=None) -> dict:
 
     prompt = _build_enriched_prompt(task_type, param, ADMIN_URL).strip()
 
-    print(f"task_type={task_type}  param={param}")
+    # ── Prompt stability audit ─────────────────────────────────────────────
+    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
+    print(f"\n[CACHE] task_type={task_type}  param={param}")
+    print(f"[CACHE] PROMPT HASH    : {prompt_hash}")
+    print(f"[CACHE] PROMPT CONTENT :\n{prompt}\n")
+    # ──────────────────────────────────────────────────────────────────────
 
     client = AsyncBrowserUse()
 
@@ -170,7 +179,7 @@ async def run_task(task: str, on_progress=None) -> dict:
         last_summary = ""
 
         async for msg in client_run:
-            role = getattr(msg, "role", "unknown")
+            role    = getattr(msg, "role",    "unknown")
             summary = getattr(msg, "summary", str(msg))
             last_summary = summary
 
@@ -183,26 +192,43 @@ async def run_task(task: str, on_progress=None) -> dict:
         result = client_run.result
 
         raw_output = getattr(result, "output", None) or last_summary
-        session = getattr(result, "session", None)
-        status = "COMPLETED"
-        steps = None
+        session    = getattr(result, "session", None)
+        status     = "COMPLETED"
+        steps      = None
+        cache_hit  = False
 
         if session:
-            status = getattr(getattr(session, "status", None), "value", "COMPLETED")
-            steps = getattr(session, "step_count", None)
+            status    = getattr(getattr(session, "status", None), "value", "COMPLETED")
+            steps     = getattr(session, "step_count", None)
+            # browser-use sets cache_hit=True on the session when a cached script ran
+            cache_hit = bool(getattr(session, "cache_hit", False))
+            # Fallback heuristic: if no explicit flag, very low step count → cache hit
+            if not cache_hit and steps is not None and steps <= 3:
+                cache_hit = True
 
         if isinstance(raw_output, dict):
             output = " ".join(str(v) for v in raw_output.values())
         else:
             output = str(raw_output)
 
-        print(f"\n✅ Done | status={status} | steps={steps}")
+        t_end    = time.perf_counter()
+        elapsed  = t_end - t_start
+        cache_label = "✅ CACHE HIT" if cache_hit else "🔄 CACHE MISS (LLM used)"
+
+        print(f"\n{'=' * 60}")
+        print(f"{cache_label}")
+        print(f"[PERF] Execution time : {elapsed:.2f}s")
+        print(f"[PERF] Steps          : {steps}")
+        print(f"[PERF] Status         : {status}")
         print(f"📤 Output: {output}")
+        print("=" * 60)
 
         return {
-            "status": status,
-            "output": output,
-            "steps": steps,
+            "status":    status,
+            "output":    output,
+            "steps":     steps,
+            "cache_hit": cache_hit,
+            "elapsed_s": round(elapsed, 2),
         }
 
     finally:
