@@ -10,6 +10,7 @@ load_dotenv()
 
 _workspace_id = None
 _WORKSPACE_NAME = "decawork-it-helpdesk"
+_AGENT_VERSION = "v3.1-strict"  # Bump this on every deploy to verify Render picked it up
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +244,7 @@ async def run_task(task: str, on_progress=None) -> dict:
     t_start = time.perf_counter()
 
     print("\n" + "=" * 60)
-    print(f"Task: {task}")
+    print(f"[AGENT {_AGENT_VERSION}] Task: {task}")
     print("=" * 60)
 
     ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:5000/admin")
