@@ -190,8 +190,8 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "4. A modal will appear — click the confirm button inside it.\n"
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
-            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
-            "CRITICAL: Do NOT hardcode or validate the specific user's name in the success banner logic. Just return whatever text the success banner shows, because the script will be parameterized for other users."
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'.\n"
+            "CRITICAL: Output NOTHING EXCEPT the exact banner text or 'USER_NOT_FOUND'. Do NOT add any markdown, prose, explanation, or rationale. Do NOT hardcode or validate the specific user's name in the success banner logic. Just return whatever text the success banner shows, because the script will be parameterized for other users."
         )
 
     if task_type == "delete_account":
@@ -207,8 +207,8 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "4. A modal will appear. Click the 'Confirm Delete' button.\n"
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
-            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
-            "CRITICAL: Do NOT hardcode the user's name. Just return the exact text in the banner."
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'.\n"
+            "CRITICAL: Output NOTHING EXCEPT the exact banner text or 'USER_NOT_FOUND'. Do NOT add any markdown, prose, explanation, or rationale. Do NOT hardcode the user's name. Just return the exact text in the banner."
         )
 
     if task_type == "disable_account":
@@ -224,8 +224,8 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "4. If the button says 'Disable', click it.\n"
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
-            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
-            "CRITICAL: Do NOT hardcode the user's name in validation logic. Just return the banner text. Do not hallucinate."
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'.\n"
+            "CRITICAL: Output NOTHING EXCEPT the exact banner text or 'USER_NOT_FOUND'. Do NOT add any markdown, prose, explanation, or rationale. Do NOT hardcode the user's name in validation logic. Just return the banner text. Do not hallucinate."
         )
 
     if task_type == "enable_account":
