@@ -1,254 +1,224 @@
-/**
- * App.jsx
- *
- * Root layout:
- *   ┌─────────┬──────────────────────────┐
- *   │ Sidebar │  Header                  │
- *   │  (nav)  ├──────────────────────────┤
- *   │         │  ChatWindow (scrollable) │
- *   │         ├──────────────────────────┤
- *   │         │  InputBox (fixed bottom) │
- *   └─────────┴──────────────────────────┘
- *
- * State:
- *   sessions        – array of { id, label, messages }
- *   activeSessionId – current session id
- *   isRunning       – agent executing
- *   pendingConfirm  – high-risk confirmation pending
- *   sidebarOpen     – sidebar expanded vs. icon-only
- */
+import { useState, useEffect, useRef, useCallback } from "react";
+import socket from "./socket";
+import ChatWindow from "./components/ChatWindow";
+import InputBar from "./components/InputBar";
 
-import { useState, useCallback, useEffect } from 'react'
-import socket from './socket'
-import Sidebar from './components/Sidebar'
-import ChatWindow from './components/ChatWindow'
-import InputBox from './components/InputBox'
-import ConfirmationModal from './components/ConfirmationModal'
+// Progress messages to HIDE (noise from browser-use internals)
+const NOISE_PATTERNS = [
+  /^🤖\s*Fetch/i,
+  /^🤖\s*Python/i,
+  /^🤖\s*Bash/i,
+  /^🤖\s*Running Python/i,
+  /^🤖\s*Running:/i,
+  /^🤖\s*Script saved/i,
+  /^🤖\s*Now let me/i,
+  /^🤖\s*Python failed/i,
+  /^🤖\s*Browser Navigate/i,
+  /^🤖\s*Navigating to/i,
+  /HTTP \d{3}/,
+  /scripts\//,
+  /\.py/,
+  /import\s/,
+  /result\s*=\s*await/,
+];
 
-/* ── Helpers ─────────────────────────────────────────────────────── */
-let _nextId = 1
-const uid = () => String(_nextId++)
-const PROGRESS_ID = '__progress__'
-
-function newSession() {
-  return { id: uid(), label: 'New chat', messages: [] }
+// Map noisy progress into clean user-facing steps
+function humanizeStep(raw) {
+  const t = raw.replace(/^🤖\s*/, "").trim();
+  if (/fetch/i.test(t)) return null;
+  if (/python|bash|running|script|import|await|result\s*=/i.test(t)) return null;
+  if (/navigat/i.test(t)) return "Opening admin panel...";
+  if (/search/i.test(t)) return "Searching for user...";
+  if (/click.*disable/i.test(t)) return "Disabling account...";
+  if (/click.*enable/i.test(t)) return "Enabling account...";
+  if (/click.*reset/i.test(t)) return "Resetting password...";
+  if (/click.*confirm/i.test(t)) return "Confirming action...";
+  if (/banner/i.test(t)) return "Reading result...";
+  if (/done/i.test(t) || /success/i.test(t)) return "Finishing up...";
+  if (NOISE_PATTERNS.some((p) => p.test(raw))) return null;
+  // If it's a clean meaningful message, pass it through
+  if (t.length > 10 && t.length < 200) return t;
+  return null;
 }
 
-/* ── Component ───────────────────────────────────────────────────── */
+// Fake instant steps shown before real backend data arrives
+const FAKE_STEPS = [
+  { text: "Understanding your request...", delay: 0 },
+  { text: "Planning action...", delay: 1200 },
+  { text: "Connecting to admin panel...", delay: 3000 },
+];
+
 export default function App() {
-  const [sessions,        setSessions]        = useState([newSession()])
-  const [activeSessionId, setActiveSessionId] = useState(null)
-  const [isRunning,       setIsRunning]       = useState(false)
-  const [pendingConfirm,  setPendingConfirm]  = useState(null)
-  const [sidebarOpen,     setSidebarOpen]     = useState(true)
+  const [messages, setMessages] = useState([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [currentStep, setCurrentStep] = useState(null);
+  const [pendingTask, setPendingTask] = useState(null);
+  const [lastTask, setLastTask] = useState("");
+  const fakeTimers = useRef([]);
+  const realStepReceived = useRef(false);
 
-  // Resolve active session id on first render
-  const activeId = activeSessionId ?? sessions[0]?.id
+  // Clear fake timers
+  const clearFakes = useCallback(() => {
+    fakeTimers.current.forEach(clearTimeout);
+    fakeTimers.current = [];
+  }, []);
 
-  // Active session object
-  const activeSession = sessions.find((s) => s.id === activeId) ?? sessions[0]
-  const messages = activeSession?.messages ?? []
+  // Start fake instant steps
+  const startFakeSteps = useCallback(() => {
+    realStepReceived.current = false;
+    FAKE_STEPS.forEach(({ text, delay }) => {
+      const id = setTimeout(() => {
+        if (!realStepReceived.current) {
+          setCurrentStep(text);
+        }
+      }, delay);
+      fakeTimers.current.push(id);
+    });
+  }, []);
 
-  /* ── Helpers to mutate only the active session's messages ──────── */
-  function setMessages(updater) {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeId
-          ? { ...s, messages: typeof updater === 'function' ? updater(s.messages) : updater }
-          : s
-      )
-    )
-  }
-
-  function labelSession(task) {
-    // Use first 40 chars of the task as the session label
-    const label = task.length > 40 ? task.slice(0, 40) + '…' : task
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeId && s.label === 'New chat' ? { ...s, label } : s
-      )
-    )
-  }
-
-  /* ── WebSocket listeners ──────────────────────────────────────── */
   useEffect(() => {
-    function onProgress({ message }) {
-      const safeMsg = message != null ? String(message) : ''
-      if (!safeMsg) return
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === PROGRESS_ID)
-        if (idx === -1) return prev
-        const updated = [...prev]
-        const existing = updated[idx]
-        const log = existing.log ? [...existing.log, safeMsg] : [safeMsg]
-        updated[idx] = { ...existing, text: safeMsg, log }
-        return updated
-      })
-    }
+    socket.on("progress", (data) => {
+      const cleaned = humanizeStep(data.message || "");
+      if (cleaned) {
+        realStepReceived.current = true;
+        clearFakes();
+        setCurrentStep(cleaned);
+      }
+    });
 
-    function onDone(result) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === PROGRESS_ID
-            ? { ...m, id: uid(), type: 'agent', text: null, result }
-            : m
-        )
-      )
-      setIsRunning(false)
-    }
+    socket.on("done", (data) => {
+      setIsRunning(false);
+      setCurrentStep(null);
+      clearFakes();
 
-    function onError({ message }) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === PROGRESS_ID
-            ? { ...m, id: uid(), type: 'error', text: message }
-            : m
-        )
-      )
-      setIsRunning(false)
-    }
+      let output = "";
+      if (typeof data.output === "string") {
+        output = data.output;
+      } else if (data.result && data.result.output) {
+        output = data.result.output;
+      } else {
+        output = JSON.stringify(data);
+      }
 
-    function onConfirmationRequired({ task }) {
-      setMessages((prev) => prev.filter((m) => m.id !== PROGRESS_ID))
-      setIsRunning(false)
-      setPendingConfirm({ task })
-    }
+      const isError =
+        data.status === "error" ||
+        output.toLowerCase().includes("error") ||
+        output.toLowerCase().includes("not_found");
 
-    socket.on('progress',              onProgress)
-    socket.on('done',                  onDone)
-    socket.on('error',                 onError)
-    socket.on('confirmation_required', onConfirmationRequired)
-
-    return () => {
-      socket.off('progress',              onProgress)
-      socket.off('done',                  onDone)
-      socket.off('error',                 onError)
-      socket.off('confirmation_required', onConfirmationRequired)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId])
-
-  /* ── Send task ────────────────────────────────────────────────── */
-  const sendTask = useCallback((task, confirmed = false) => {
-    _emitTask(task, confirmed)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId])
-
-  function _emitTask(task, confirmed = false) {
-    setIsRunning(true)
-    labelSession(task)
-
-    if (!confirmed) {
       setMessages((prev) => [
         ...prev,
-        { id: uid(), type: 'user', text: task, task },
-      ])
-    }
+        {
+          role: "agent",
+          type: isError ? "error" : "result",
+          text: output,
+          task: lastTask,
+          result: data,
+        },
+      ]);
+    });
 
+    socket.on("error", (data) => {
+      setIsRunning(false);
+      setCurrentStep(null);
+      clearFakes();
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", type: "error", text: data.message || "An error occurred." },
+      ]);
+    });
+
+    socket.on("confirmation_required", (data) => {
+      setIsRunning(false);
+      setCurrentStep(null);
+      clearFakes();
+      setPendingTask(data.task);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          type: "confirm",
+          task: data.task,
+          onConfirm: () => handleConfirm(data.task),
+          onCancel: handleCancel,
+        },
+      ]);
+    });
+
+    return () => {
+      socket.off("progress");
+      socket.off("done");
+      socket.off("error");
+      socket.off("confirmation_required");
+      clearFakes();
+    };
+  }, [lastTask, clearFakes]);
+
+  const handleSubmit = (taskText) => {
+    setMessages((prev) => [...prev, { role: "user", text: taskText }]);
+    setIsRunning(true);
+    setLastTask(taskText);
+    startFakeSteps();
+    socket.emit("run_task", { task: taskText });
+  };
+
+  const handleConfirm = (taskText) => {
     setMessages((prev) => [
       ...prev,
-      { id: PROGRESS_ID, type: 'progress', text: 'Initializing request', log: ['Initializing request…'], task },
-    ])
+      { role: "agent", type: "progress", text: "✅ Confirmation received. Executing..." },
+    ]);
+    setIsRunning(true);
+    setPendingTask(null);
+    startFakeSteps();
+    socket.emit("run_task", { task: taskText, confirm: true });
+  };
 
-    socket.emit('run_task', { task, confirm: confirmed })
-  }
+  const handleCancel = () => {
+    setMessages((prev) => [
+      ...prev,
+      { role: "agent", type: "error", text: "Action cancelled by user." },
+    ]);
+    setPendingTask(null);
+  };
 
-  /* ── Confirmation modal ───────────────────────────────────────── */
-  function handleConfirm() {
-    const { task } = pendingConfirm
-    setPendingConfirm(null)
-    _emitTask(task, true)
-  }
-  function handleCancel() { setPendingConfirm(null) }
-
-  /* ── Message update (feedback) ────────────────────────────────── */
-  function handleMessageUpdate(updated) {
-    setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
-  }
-
-  /* ── New chat / session switch ────────────────────────────────── */
-  function handleNewChat() {
-    const s = newSession()
-    setSessions((prev) => [s, ...prev])
-    setActiveSessionId(s.id)
-  }
-
-  function handleSelectSession(id) {
-    setActiveSessionId(id)
-  }
-
-  /* ── Socket connection status ─────────────────────────────────── */
-  const [connected, setConnected] = useState(socket.connected)
-  useEffect(() => {
-    const onConnect    = () => setConnected(true)
-    const onDisconnect = () => setConnected(false)
-    socket.on('connect',    onConnect)
-    socket.on('disconnect', onDisconnect)
-    return () => {
-      socket.off('connect',    onConnect)
-      socket.off('disconnect', onDisconnect)
+  const handleRetry = () => {
+    if (lastTask) {
+      setIsRunning(true);
+      setCurrentStep("Retrying task...");
+      startFakeSteps();
+      socket.emit("run_task", { task: lastTask });
     }
-  }, [])
+  };
 
-  /* ── Render ───────────────────────────────────────────────────── */
+  const handleMessageUpdate = (idx, updatedMsg) => {
+    setMessages((prev) => prev.map((m, i) => (i === idx ? updatedMsg : m)));
+  };
+
   return (
-    <div className="flex w-screen h-screen bg-gray-950 text-gray-100 overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-[#09090b] font-sans text-[#f4f4f5]">
+      {/* Header */}
+      <header className="h-[56px] shrink-0 flex items-center px-5 md:px-6 sticky top-0 z-10 w-full border-b border-white/[0.04] bg-[#09090b]/80 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <span className="text-white text-[10px] font-bold tracking-tight">IT</span>
+          </div>
+          <div className="font-semibold tracking-tight text-[15px]">
+            IT Agent
+            <span className="text-[#52525b] font-normal ml-2 text-[13px]">v4.0</span>
+          </div>
+        </div>
+      </header>
 
-      {/* ── Sidebar ────────────────────────────────────────────── */}
-      <Sidebar
-        history={sessions.filter((s) => s.messages.length > 0)}
-        activeId={activeId}
-        onSelectSession={handleSelectSession}
-        onNewChat={handleNewChat}
-        collapsed={!sidebarOpen}
-        onToggle={() => setSidebarOpen((v) => !v)}
+      {/* Chat */}
+      <ChatWindow
+        messages={messages}
+        isRunning={isRunning}
+        currentStep={currentStep}
+        onRetry={handleRetry}
+        onMessageUpdate={handleMessageUpdate}
       />
 
-      {/* ── Main column ────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-
-        {/* Header */}
-        <header className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-800/60 bg-gray-950/80 backdrop-blur-sm">
-          <div>
-            <h1 className="text-sm font-semibold text-gray-100 leading-none">
-              {activeSession?.label ?? 'New chat'}
-            </h1>
-            <p className="text-[11px] text-gray-500 mt-0.5">IT Automation Agent</p>
-          </div>
-
-          {/* Status indicators */}
-          <div className="flex items-center gap-4">
-            {/* WS connection */}
-            <div className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} />
-              <span className="text-[11px] text-gray-500">{connected ? 'Connected' : 'Offline'}</span>
-            </div>
-
-            {/* Agent status */}
-            {isRunning && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-[11px] text-amber-400/80">Running</span>
-              </div>
-            )}
-          </div>
-        </header>
-
-        {/* Chat */}
-        <ChatWindow messages={messages} onUpdate={handleMessageUpdate} />
-
-        {/* Input */}
-        <InputBox onSend={sendTask} disabled={isRunning} />
-      </div>
-
-      {/* Confirmation modal */}
-      {pendingConfirm && (
-        <ConfirmationModal
-          task={pendingConfirm.task}
-          onConfirm={handleConfirm}
-          onCancel={handleCancel}
-        />
-      )}
+      {/* Input */}
+      <InputBar onSubmit={handleSubmit} isRunning={isRunning || pendingTask !== null} />
     </div>
-  )
+  );
 }
