@@ -130,7 +130,7 @@ async def run_task(task: str, on_progress=None) -> dict:
     print(f"Task: {task}")
     print("=" * 60)
 
-    ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:5000/admin?ngrok-skip-browser-warning=true")
+    ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:5000/admin")
 
     parameterized_task = wrap_params(task)
     prompt = _build_enriched_prompt(parameterized_task, ADMIN_URL)

@@ -350,4 +350,4 @@ def feedback():
 if __name__ == "__main__":
     # Use socketio.run so WebSocket upgrades are handled correctly;
     # all existing HTTP routes continue to work as before.
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
