@@ -350,4 +350,5 @@ def feedback():
 if __name__ == "__main__":
     # Use socketio.run so WebSocket upgrades are handled correctly;
     # all existing HTTP routes continue to work as before.
-    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # allow_unsafe_werkzeug=True prevents the production crash since we aren't using eventlet
+    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), allow_unsafe_werkzeug=True)
