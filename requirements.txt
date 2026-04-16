@@ -2,3 +2,5 @@ browser-use-sdk
 python-dotenv
 flask
 flask-socketio
+google-generativeai
+flask-cors

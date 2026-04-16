@@ -26,6 +26,7 @@ from datetime import datetime
 
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, emit       # ← WebSocket support
+from flask_cors import CORS
 from browser_agent import run_task as _run_task
 
 # ---------------------------------------------------------------------------
@@ -67,6 +68,9 @@ def _save_users(users):
 
 app = Flask(__name__)
 app.config['SERVER_NAME'] = None
+
+# Allow CORS on traditional REST endpoints
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Allow all origins so any frontend can connect over WebSocket
 socketio = SocketIO(app, cors_allowed_origins="*")
