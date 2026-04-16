@@ -10,7 +10,7 @@ load_dotenv()
 
 _workspace_id = None
 _WORKSPACE_NAME = "decawork-it-helpdesk"
-_AGENT_VERSION = "v3.1-strict"  # Bump this on every deploy to verify Render picked it up
+_AGENT_VERSION = "v3.2-paramcache"  # Bump this on every deploy to verify Render picked it up
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
     if task_type == "reset_password":
         return (
             "Task: Reset password for a user.\n\n"
-            f"Target email: {email}\n\n"
+            f"Target email: @{{{{{email}}}}}\n\n"
             "Goal:\n"
             "A green success banner must appear.\n\n"
             "Steps:\n"
@@ -196,7 +196,7 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
     if task_type == "disable_account":
         return (
             "Task: Disable account for a user.\n\n"
-            f"Target email: {email}\n\n"
+            f"Target email: @{{{{{email}}}}}\n\n"
             "Goal:\n"
             "Disable the user account if it is currently active.\n\n"
             "Steps:\n"
@@ -213,7 +213,7 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
     if task_type == "enable_account":
         return (
             "Task: Enable account for a user.\n\n"
-            f"Target email: {email}\n\n"
+            f"Target email: @{{{{{email}}}}}\n\n"
             "Goal:\n"
             "Enable the user account if it is currently inactive.\n\n"
             "Steps:\n"
