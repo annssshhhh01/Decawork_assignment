@@ -52,10 +52,11 @@ _INTENT_MAP: list[tuple[str, list[str]]] = [
     ("reset_password",  ["reset password", "reset pass", "change password", "new password"]),
     ("disable_account", ["disable"]),
     ("enable_account",  ["enable",  "reactivate", "unblock"]),
+    ("delete_account",  ["delete", "remove", "erase"]),
 ]
 
 # Action task types that REQUIRE an email — generic tasks do not
-_ACTION_TYPES = {"reset_password", "disable_account", "enable_account"}
+_ACTION_TYPES = {"reset_password", "disable_account", "enable_account", "delete_account"}
 
 def detect_task_type(raw: str) -> str:
     """
@@ -190,7 +191,24 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
             "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
-            "Do not hallucinate. Only act on visible UI."
+            "CRITICAL: Do NOT hardcode or validate the specific user's name in the success banner logic. Just return whatever text the success banner shows, because the script will be parameterized for other users."
+        )
+
+    if task_type == "delete_account":
+        return (
+            "Task: Permanently delete a user.\n\n"
+            f"Target email: @{{{{{email}}}}}\n\n"
+            "Goal:\n"
+            "Delete the user account from the system.\n\n"
+            "Steps:\n"
+            f"1. Open the admin panel at {admin_url}.\n"
+            "2. Type the target email into the 'Search user' input.\n"
+            "3. In the table row for that user, click the 'Delete' button.\n"
+            "4. A modal will appear. Click the 'Confirm Delete' button.\n"
+            "5. Wait for the green banner and read its text.\n\n"
+            "Constraints:\n"
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
+            "CRITICAL: Do NOT hardcode the user's name. Just return the exact text in the banner."
         )
 
     if task_type == "disable_account":
@@ -207,7 +225,7 @@ def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
             "5. Wait for the green banner and read its text.\n\n"
             "Constraints:\n"
             "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
-            "Do not hallucinate. Only act on visible UI."
+            "CRITICAL: Do NOT hardcode the user's name in validation logic. Just return the banner text. Do not hallucinate."
         )
 
     if task_type == "enable_account":
