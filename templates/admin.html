@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Deca IT Admin Panel" />
+  <title>Admin Panel — Deca IT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & base ───────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0a0f1a;
+      --surface:     #111827;
+      --surface-2:   #1a2233;
+      --border:      #1f2d45;
+      --border-2:    #243352;
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --text-subtle: #94a3b8;
+      --indigo:      #4f46e5;
+      --indigo-h:    #4338ca;
+      --indigo-10:   rgba(79,70,229,.1);
+      --green:       #10b981;
+      --green-10:    rgba(16,185,129,.1);
+      --amber:       #f59e0b;
+      --red:         #ef4444;
+      --red-10:      rgba(239,68,68,.1);
+      --radius:      10px;
+      --radius-sm:   6px;
+      --shadow:      0 4px 24px rgba(0,0,0,.5);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Scrollbar ──────────────────────────────────────────── */
+    ::-webkit-scrollbar              { width: 5px; }
+    ::-webkit-scrollbar-track        { background: transparent; }
+    ::-webkit-scrollbar-thumb        { background: var(--border-2); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover  { background: #374151; }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar {
+      width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-brand .icon {
+      width: 32px; height: 32px;
+      background: var(--indigo-10);
+      border: 1px solid rgba(79,70,229,.3);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sidebar-brand .icon svg { width: 16px; height: 16px; color: #818cf8; }
+    .sidebar-brand .name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .sidebar-brand .sub  { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+
+    .nav-section { padding: 0 12px 8px; }
+    .nav-label {
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--text-muted);
+      padding: 0 8px 8px;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background .12s, color .12s;
+      margin-bottom: 2px;
+    }
+    .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .nav-item:hover, .nav-item.active {
+      background: var(--indigo-10);
+      color: #a5b4fc;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding: 16px 20px 0;
+    }
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .user-avatar {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--indigo-10);
+      border: 1px solid rgba(79,70,229,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: #818cf8;
+    }
+    .user-chip .info { flex: 1; min-width: 0; }
+    .user-chip .uname { font-size: 12px; font-weight: 500; color: var(--text); }
+    .user-chip .urole { font-size: 10px; color: var(--text-muted); }
+
+    /* ── Main ────────────────────────────────────────────────── */
+    .main {
+      margin-left: 220px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Top bar ─────────────────────────────────────────────── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 8px; }
+    .breadcrumb { font-size: 13px; color: var(--text-muted); }
+    .breadcrumb span { color: var(--text); font-weight: 500; }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .status-dot {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 2px rgba(16,185,129,.2);
+    }
+
+    /* ── Content ─────────────────────────────────────────────── */
+    .content { padding: 32px; flex: 1; max-width: 1100px; width: 100%; }
+
+    .page-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .page-title    { font-size: 20px; font-weight: 700; color: var(--text); }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+    /* ── Stats row ───────────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 10px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-sub   { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+    /* ── Toolbar ─────────────────────────────────────────────── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Search input ────────────────────────────────────────── */
+    .search-wrap { position: relative; }
+    .search-wrap svg {
+      position: absolute;
+      left: 11px; top: 50%; transform: translateY(-50%);
+      width: 14px; height: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    #search-user {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px 8px 34px;
+      color: var(--text);
+      font-size: 13px;
+      width: 240px;
+      outline: none;
+      transition: border .15s;
+      font-family: inherit;
+    }
+    #search-user::placeholder { color: var(--text-muted); }
+    #search-user:focus { border-color: rgba(79,70,229,.6); }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn-group { display: flex; gap: 10px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      transition: background .15s, opacity .15s, transform .1s;
+      white-space: nowrap;
+      outline: none;
+    }
+    .btn:active:not(:disabled) { transform: scale(.97); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--indigo);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--indigo-h); }
+
+    .btn-outline {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      color: var(--text-subtle);
+    }
+    .btn-outline:hover:not(:disabled) {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: rgba(79,70,229,.4);
+    }
+
+    .btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+    /* ── Success banner ──────────────────────────────────────── */
+    #success-banner {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: var(--green-10);
+      border: 1px solid rgba(16,185,129,.25);
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #34d399;
+    }
+    #success-banner.show { display: flex; }
+    #success-banner svg  { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* ── Table card ──────────────────────────────────────────── */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead { background: var(--surface-2); }
+    thead th {
+      padding: 12px 20px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:last-child  { border-bottom: none; }
+    tbody tr:hover       { background: var(--surface-2); }
+
+    tbody td {
+      padding: 14px 20px;
+      color: var(--text-subtle);
+      vertical-align: middle;
+    }
+    tbody td:first-child { color: var(--text); font-weight: 500; }
+
+    /* ── User row ────────────────────────────────────────────── */
+    .user-cell { display: flex; align-items: center; gap: 10px; }
+    .user-icon {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--indigo-10);
+      border: 1px solid rgba(79,70,229,.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: #818cf8;
+      flex-shrink: 0;
+    }
+
+    /* ── Role badge ──────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-admin  { background: var(--indigo-10); color: #818cf8; border: 1px solid rgba(79,70,229,.25); }
+    .badge-user   { background: rgba(100,116,139,.12); color: var(--text-muted); border: 1px solid rgba(100,116,139,.2); }
+    .badge-super  { background: rgba(245,158,11,.1); color: #fbbf24; border: 1px solid rgba(245,158,11,.25); }
+    .badge-viewer { background: var(--green-10); color: #34d399; border: 1px solid rgba(16,185,129,.2); }
+
+    /* ── Status cell ─────────────────────────────────────────── */
+    .status-active   { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 12px; }
+    .status-inactive { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 12px; }
+    .status-dot-sm { width: 5px; height: 5px; border-radius: 50%; }
+    .active-dot   { background: var(--green); }
+    .inactive-dot { background: var(--text-muted); }
+
+    /* ── Row actions ─────────────────────────────────────────── */
+    .row-actions { display: flex; gap: 6px; }
+    .row-btn {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border-2);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      transition: background .1s, color .1s;
+    }
+    .row-btn:hover { background: var(--surface-2); color: var(--text); }
+    .row-btn.danger:hover { background: var(--red-10); color: var(--red); border-color: rgba(239,68,68,.3); }
+
+    /* ── Empty / filter state ────────────────────────────────── */
+    #empty-row { display: none; }
+    #empty-row td { text-align: center; padding: 40px; color: var(--text-muted); }
+
+    /* ── Modal overlay ───────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      width: 100%;
+      max-width: 420px;
+      margin: 16px;
+      padding: 28px;
+    }
+    .modal-icon {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      background: var(--red-10);
+      border: 1px solid rgba(239,68,68,.2);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+    }
+    .modal-icon svg { width: 18px; height: 18px; color: var(--red); }
+    .modal-title   { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .modal-msg     { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 6px; }
+    .modal-user-label {
+      font-size: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      color: var(--text-subtle);
+      margin: 12px 0 20px;
+      font-family: monospace;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <div class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16.5 7.5h-9v9h9v-9Z"/>
+          <path fill-rule="evenodd" d="M8.25 2.25A.75.75 0 0 1 9 3v.75h2.25V3a.75.75 0 0 1 1.5 0v.75H15V3a.75.75 0 0 1 1.5 0v.75h.75a3 3 0 0 1 3 3v.75H21A.75.75 0 0 1 21 9h-.75v2.25H21a.75.75 0 0 1 0 1.5h-.75V15H21a.75.75 0 0 1 0 1.5h-.75v.75a3 3 0 0 1-3 3h-.75V21a.75.75 0 0 1-1.5 0v-.75h-2.25V21a.75.75 0 0 1-1.5 0v-.75H9V21a.75.75 0 0 1-1.5 0v-.75h-.75a3 3 0 0 1-3-3v-.75H3A.75.75 0 0 1 3 15h.75v-2.25H3a.75.75 0 0 1 0-1.5h.75V9H3a.75.75 0 0 1 0-1.5h.75v-.75a3 3 0 0 1 3-3h.75V3a.75.75 0 0 1 .75-.75ZM6 6.75A.75.75 0 0 1 6.75 6h10.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75V6.75Z" clip-rule="evenodd"/>
+        </svg>
+      </div>
+      <div>
+        <div class="name">Deca IT</div>
+        <div class="sub">Admin Console</div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Management</div>
+      <a href="/admin" class="nav-item active">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z"/>
+        </svg>
+        User Management
+      </a>
+      <a href="#" class="nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd"/>
+        </svg>
+        Access Control
+      </a>
+      <a href="#" class="nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 1 1.1 1.677A.75.75 0 0 1 13 17.5h-6a.75.75 0 0 1-.74-.873A3.506 3.506 0 0 1 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5ZM4.25 3.5a.75.75 0 0 0-.75.75v7.5c0 .414.336.75.75.75h11.5a.75.75 0 0 0 .75-.75v-7.5a.75.75 0 0 0-.75-.75H4.25Z" clip-rule="evenodd"/>
+        </svg>
+        System Logs
+      </a>
+      <a href="#" class="nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/>
+        </svg>
+        Audit Trail
+      </a>
+    </div>
+
+    <div class="nav-section" style="margin-top:8px;">
+      <div class="nav-label">System</div>
+      <a href="#" class="nav-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .205 1.251l-1.18 2.044a1 1 0 0 1-1.186.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.205-1.251l1.18-2.044a1 1 0 0 1 1.186-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+        </svg>
+        Settings
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar">AD</div>
+        <div class="info">
+          <div class="uname">Admin User</div>
+          <div class="urole">Super Admin</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="breadcrumb">Management / <span>Users</span></span>
+      </div>
+      <div class="topbar-right">
+        <div class="status-dot">
+          <div class="dot"></div>
+          System Online
+        </div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- Page header -->
+      <div class="page-header">
+        <div>
+          <div class="page-title">User Management</div>
+          <div class="page-subtitle">Manage accounts, roles, and access permissions.</div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Users</div>
+          <div class="stat-value">{{ users | length }}</div>
+          <div class="stat-sub">Across all roles</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active</div>
+          <div class="stat-value">{{ users | selectattr('status', 'equalto', 'active') | list | length }}</div>
+          <div class="stat-sub">Currently enabled</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Admins</div>
+          <div class="stat-value">{{ users | selectattr('role', 'in', ['Admin', 'Super Admin']) | list | length }}</div>
+          <div class="stat-sub">Elevated access</div>
+        </div>
+      </div>
+
+      <!-- Success banner -->
+      <div id="success-banner" role="alert" aria-live="polite" style="display: none; align-items: center; gap: 10px; background: #10b981; color: white; border-radius: 6px; padding: 14px 20px; font-weight: bold; margin-bottom: 24px; font-size: 15px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width: 20px; height: 20px;">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/>
+        </svg>
+        <span id="success-text"></span>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-wrap">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd"/>
+          </svg>
+          <input
+            type="text"
+            id="search-user"
+            placeholder="Search user"
+            autocomplete="off"
+            oninput="filterUsers(this.value)"
+          />
+        </div>
+
+        <div class="btn-group">
+          <button id="btn-create" class="btn btn-outline" onclick="createUser()">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/>
+            </svg>
+            Create User
+          </button>
+
+          <button id="btn-reset" class="btn btn-primary" onclick="openResetModal()">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd"/>
+            </svg>
+            Reset Password
+          </button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-card">
+        <table id="user-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Last Active</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            {% for user in users %}
+            <tr data-name="{{ user.name | lower }}" data-email="{{ user.email | lower }}">
+              <td>
+                <div class="user-cell">
+                  <div class="user-icon">{{ user.name[0] | upper }}</div>
+                  {{ user.name }}
+                </div>
+              </td>
+              <td>{{ user.email }}</td>
+              <td>
+                {% if user.role == 'Super Admin' %}
+                  <span class="badge badge-super">Super Admin</span>
+                {% elif user.role == 'Admin' %}
+                  <span class="badge badge-admin">Admin</span>
+                {% elif user.role == 'Viewer' %}
+                  <span class="badge badge-viewer">Viewer</span>
+                {% else %}
+                  <span class="badge badge-user">{{ user.role }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if user.status == 'active' %}
+                  <span class="status-active" style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;">[ STATUS: ACTIVE ]</span>
+                {% else %}
+                  <span class="status-inactive" style="background: #64748b; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;">[ STATUS: INACTIVE ]</span>
+                {% endif %}
+              </td>
+              <td>{{ user.last_active }}</td>
+              <td>
+                <div class="row-actions">
+                  <button class="row-btn" onclick="editUser('{{ user.name }}')">Edit</button>
+                  <button class="row-btn {% if user.status == 'active' %}danger{% endif %}" data-email="{{ user.email }}" onclick="toggleAccount('{{ user.email }}')">{% if user.status == 'active' %}Disable{% else %}Enable{% endif %}</button>
+                  <button class="row-btn danger" data-email="{{ user.email }}" onclick="openResetModal('{{ user.name }}')">Reset Password</button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+
+            <!-- Empty state row (shown when search returns nothing) -->
+            <tr id="empty-row">
+              <td colspan="6">No users match your search.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+
+<!-- ── Reset Password Modal ──────────────────────────────── -->
+<div id="reset-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd"/>
+      </svg>
+    </div>
+    <div class="modal-title" id="modal-title">Reset Password</div>
+    <div class="modal-msg">Are you sure you want to reset this user's password? A new temporary password will be generated and emailed to the user.</div>
+    <div class="modal-user-label" id="modal-user-label">Selected user email</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeResetModal()">Cancel</button>
+      <button id="btn-confirm-reset" class="btn btn-primary" onclick="confirmReset()">Confirm Reset Password</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+  /* ── State ─────────────────────────────────────────────────── */
+  let _resetTarget = null   // name of user being reset
+
+  /* ── Search / filter ────────────────────────────────────────── */
+  function filterUsers(query) {
+    const q    = query.trim().toLowerCase()
+    const rows = document.querySelectorAll('#table-body tr[data-name]')
+    let visible = 0
+
+    rows.forEach(function(row) {
+      const name  = row.getAttribute('data-name')  || ''
+      const email = row.getAttribute('data-email') || ''
+      const match = !q || name.includes(q) || email.includes(q)
+      row.style.display = match ? '' : 'none'
+      if (match) visible++
+    })
+
+    document.getElementById('empty-row').style.display = visible === 0 ? '' : 'none'
+  }
+
+  /* ── Create User ─────────────────────────────────────────────── */
+  function createUser() {
+    var btn = document.getElementById('btn-create')
+    setLoading(btn, 'Processing...')
+
+    setTimeout(function() {
+      resetBtn(btn, 'Create User')
+
+      // Insert a fake user row so the table visually updates
+      var tbody = document.getElementById('table-body')
+      var newName  = 'New User'
+      var newEmail = 'newuser@company.com'
+      var row = document.createElement('tr')
+      row.setAttribute('data-name',  newName.toLowerCase())
+      row.setAttribute('data-email', newEmail.toLowerCase())
+      row.style.background = 'rgba(79,70,229,.06)'   // brief highlight
+      row.innerHTML = [
+        '<td><div class="user-cell"><div class="user-icon">N</div>' + newName + '</div></td>',
+        '<td>' + newEmail + '</td>',
+        '<td><span class="badge badge-user">User</span></td>',
+        '<td><span class="status-active" style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;">[ STATUS: ACTIVE ]</span></td>',
+        '<td>Just now</td>',
+        '<td><div class="row-actions">'
+          + '<button class="row-btn" onclick="editUser(\'' + newName + '\')" >Edit</button>'
+          + '<button class="row-btn danger" data-email="' + newEmail + '" onclick="openResetModal(\'' + newName + '\')" >Reset Password</button>'
+          + '</div></td>',
+      ].join('')
+
+      // Insert before the empty-state row
+      var emptyRow = document.getElementById('empty-row')
+      tbody.insertBefore(row, emptyRow)
+
+      // Fade out temporary highlight
+      setTimeout(function() { row.style.background = '' }, 1200)
+
+      showSuccess('User created successfully.')
+    }, 300)
+  }
+
+  /* ── Reset Password modal ────────────────────────────────────── */
+  function openResetModal(userName) {
+    _resetTarget = userName || null
+    var label = _resetTarget
+      ? _resetTarget + ' — password will be reset'
+      : 'Select a user row to target a specific account'
+    document.getElementById('modal-user-label').textContent = label
+    document.getElementById('reset-modal').classList.add('open')
+  }
+
+  function closeResetModal() {
+    document.getElementById('reset-modal').classList.remove('open')
+    _resetTarget = null
+  }
+
+  function confirmReset() {
+    var btn = document.getElementById('btn-confirm-reset')
+    setLoading(btn, 'Processing...')
+    setTimeout(function() {
+      resetBtn(btn, 'Confirm')
+      var target = _resetTarget;
+      closeResetModal()
+      showSuccess('Password reset successfully for ' + (target || 'selected user') + '.')
+    }, 300)
+  }
+
+  /* ── Edit (stub for agent) ───────────────────────────────────── */
+  function editUser(name) {
+    showSuccess('Editing user: ' + name + ' (feature coming soon).')
+  }
+
+  /* ── Toggle account (disable / enable) ───────────────────────── */
+  function toggleAccount(email) {
+    // Send background sync request to the Python backend so the state actually persists
+    fetch('/api/toggle_user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    }).catch(function(e) { console.error('Failed to sync state:', e) })
+
+    var row = document.querySelector('tr[data-email="' + email.toLowerCase() + '"]')
+    if (!row) { showSuccess('User not found: ' + email); return }
+
+    var statusCell = row.querySelector('td:nth-child(4)')
+    var isActive = statusCell.innerHTML.indexOf('STATUS: ACTIVE') !== -1
+    var userName = row.querySelector('.user-cell').textContent.trim()
+
+    if (isActive) {
+      statusCell.innerHTML = '<span class="status-inactive" style="background: #64748b; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;">[ STATUS: INACTIVE ]</span>'
+      // Update the toggle button text
+      var btns = row.querySelectorAll('.row-btn')
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.trim() === 'Disable') {
+          btns[i].textContent = 'Enable'
+          btns[i].classList.remove('danger')
+          break
+        }
+      }
+      showSuccess('Account disabled for ' + userName + ' (' + email + ').')
+    } else {
+      statusCell.innerHTML = '<span class="status-active" style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;">[ STATUS: ACTIVE ]</span>'
+      var btns = row.querySelectorAll('.row-btn')
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.trim() === 'Enable') {
+          btns[i].textContent = 'Disable'
+          btns[i].classList.add('danger')
+          break
+        }
+      }
+      showSuccess('Account enabled for ' + userName + ' (' + email + ').')
+    }
+  }
+
+  /* ── Loading state helpers ───────────────────────────────────── */
+  function setLoading(btn, label) {
+    btn.disabled = true
+    btn.dataset.original = btn.textContent.trim()
+    btn.textContent = label
+  }
+  function resetBtn(btn, fallback) {
+    btn.disabled = false
+    btn.textContent = btn.dataset.original || fallback
+  }
+
+  /* ── Success banner ──────────────────────────────────────────── */
+  var _bannerTimer = null
+  function showSuccess(msg) {
+    var banner = document.getElementById('success-banner')
+    document.getElementById('success-text').textContent = 'SUCCESS: ' + msg
+    banner.classList.add('show')
+    if (_bannerTimer) clearTimeout(_bannerTimer)
+    _bannerTimer = setTimeout(function() {
+      banner.classList.remove('show')
+    }, 10000)
+  }
+
+  /* ── Close modal on backdrop click ──────────────────────────── */
+  document.getElementById('reset-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeResetModal()
+  })
+
+  /* ── Close modal on Escape ───────────────────────────────────── */
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeResetModal()
+  })
+</script>
+</body>
+</html>

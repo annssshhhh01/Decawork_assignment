@@ -1,0 +1,4 @@
+browser-use-sdk
+python-dotenv
+flask
+flask-socketio
