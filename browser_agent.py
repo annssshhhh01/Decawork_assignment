@@ -13,34 +13,74 @@ _WORKSPACE_NAME = "decawork-it-helpdesk"
 
 
 # ---------------------------------------------------------------------------
-# Parameter extraction
+# Parameter extraction  — regex only, ignores all surrounding words
 # ---------------------------------------------------------------------------
 
-_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.\w+\b")
+# Strict RFC-5321-flavoured email pattern — never captures prose words
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 
-def extract_email(task: str) -> str | None:
-    """Pull the first email address out of a raw user task string."""
-    m = _EMAIL_RE.search(task)
-    return m.group(0) if m else None
+def extract_email(raw: str) -> str | None:
+    """Return the first valid email found in raw input, or None."""
+    m = _EMAIL_RE.search(raw)
+    return m.group(0).lower() if m else None
 
 
 # ---------------------------------------------------------------------------
-# Task type detection
+# Task-type detection  — keyword-intent based, order matters (most specific first)
 # ---------------------------------------------------------------------------
+#
+# Each entry is (task_type, [trigger_words]).  The FIRST match wins.
+# Keywords are plain substring matches on lowercased input — no exact phrase needed.
 
-_TASK_TYPES = {
-    "reset_password": ["reset password", "reset pass", "change password"],
-    "disable_account": ["disable account", "disable user", "disable "],
-    "enable_account":  ["enable account",  "enable user",  "enable "],
-}
+_INTENT_MAP: list[tuple[str, list[str]]] = [
+    ("reset_password",  ["reset password", "reset pass", "change password", "new password"]),
+    ("disable_account", ["disable"]),
+    ("enable_account",  ["enable",  "reactivate", "unblock"]),
+]
 
-def detect_task_type(task: str) -> str:
-    """Return a stable task-type key, or 'generic' if no match."""
-    lower = task.lower()
-    for task_type, keywords in _TASK_TYPES.items():
+def detect_task_type(raw: str) -> str:
+    """
+    Map any natural-language phrasing to a stable task_type key.
+
+    Examples that all map to 'disable_account':
+      'disable account for …'
+      'disable this account …'
+      'please disable …'
+      'can you disable john@…'
+      'disable john@… now'
+    """
+    lower = raw.lower()
+    for task_type, keywords in _INTENT_MAP:
         if any(kw in lower for kw in keywords):
             return task_type
     return "generic"
+
+
+# ---------------------------------------------------------------------------
+# Preprocessing pipeline  — single entry point used by run_task
+# ---------------------------------------------------------------------------
+
+def parse_input(raw: str) -> tuple[str, str]:
+    """
+    Converts free-form user input into a (task_type, param) pair.
+
+    The raw sentence is DISCARDED after this function — only the
+    stable task_type and the clean extracted email are passed forward,
+    which guarantees the prompt template is always identical.
+    """
+    task_type = detect_task_type(raw)
+    email     = extract_email(raw)
+    param     = email if email else raw.strip()
+
+    # ── Debug audit ───────────────────────────────────────────────────────
+    print(f"\n[PARSE] RAW INPUT      : {raw}")
+    print(f"[PARSE] EXTRACTED EMAIL: {email}")
+    print(f"[PARSE] TASK TYPE      : {task_type}")
+    print(f"[PARSE] PARAM (to prompt): {param}")
+    # ──────────────────────────────────────────────────────────────────────
+
+    return task_type, param
+
 
 
 # ---------------------------------------------------------------------------
@@ -148,18 +188,18 @@ async def run_task(task: str, on_progress=None) -> dict:
 
     ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:5000/admin")
 
-    task_type = detect_task_type(task)
-    email     = extract_email(task)
-    param     = email if email else task   # generic fallback uses raw task
+    # ── Single preprocessing entry point ────────────────────────────────────
+    # parse_input() discards the raw sentence; only (task_type, clean_email) survive.
+    task_type, param = parse_input(task)
 
     prompt = _build_enriched_prompt(task_type, param, ADMIN_URL).strip()
 
-    # ── Prompt stability audit ─────────────────────────────────────────────
+    # ── Prompt stability audit ───────────────────────────────────────────────
     prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
-    print(f"\n[CACHE] task_type={task_type}  param={param}")
     print(f"[CACHE] PROMPT HASH    : {prompt_hash}")
     print(f"[CACHE] PROMPT CONTENT :\n{prompt}\n")
-    # ──────────────────────────────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────────────
+
 
     client = AsyncBrowserUse()
 
