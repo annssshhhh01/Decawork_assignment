@@ -622,7 +622,7 @@
                   <button class="row-btn" onclick="editUser('{{ user.name }}')">Edit</button>
                   <button class="row-btn {% if user.status == 'active' %}danger{% endif %}" data-email="{{ user.email }}" onclick="toggleAccount('{{ user.email }}')">{% if user.status == 'active' %}Disable{% else %}Enable{% endif %}</button>
                   <button class="row-btn danger" data-email="{{ user.email }}" onclick="openResetModal('{{ user.name }}')">Reset Password</button>
-                  <button class="row-btn danger" data-email="{{ user.email }}" onclick="openDeleteModal('{{ user.name }}')">Delete</button>
+                  <button class="row-btn danger" data-email="{{ user.email }}" onclick="openDeleteModal('{{ user.name }}', '{{ user.email }}')">Delete</button>
                 </div>
               </td>
             </tr>
@@ -765,29 +765,54 @@
   }
 
   /* ── Delete User modal ───────────────────────────────────────── */
-  let _deleteTarget = null
+  let _deleteTargetName = null
+  let _deleteTargetEmail = null
 
-  function openDeleteModal(userName) {
-    _deleteTarget = userName || null
-    document.getElementById('modal-delete-label').textContent = _deleteTarget
-      ? _deleteTarget + ' will be permanently deleted'
+  function openDeleteModal(userName, userEmail) {
+    _deleteTargetName = userName || null
+    _deleteTargetEmail = userEmail || null
+
+    document.getElementById('modal-delete-label').textContent = _deleteTargetName
+      ? _deleteTargetName + ' will be permanently deleted'
       : 'Select a user row to delete'
     document.getElementById('delete-modal').classList.add('open')
   }
 
   function closeDeleteModal() {
     document.getElementById('delete-modal').classList.remove('open')
-    _deleteTarget = null
+    _deleteTargetName = null
+    _deleteTargetEmail = null
   }
 
   function confirmDelete() {
+    if (!_deleteTargetEmail) return;
+    
     var btn = document.getElementById('btn-confirm-delete')
     setLoading(btn, 'Processing...')
-    setTimeout(function() {
-      resetBtn(btn, 'Confirm')
-      closeDeleteModal()
-      showSuccess('User successfully deleted.')
-    }, 300)
+    
+    fetch('/api/delete_user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: _deleteTargetEmail })
+    })
+    .then(r => r.json())
+    .then(data => {
+      resetBtn(btn, 'Confirm Delete')
+      if (data.status === 'success') {
+        closeDeleteModal()
+        showSuccess('User successfully deleted.')
+        
+        // Remove row from UI without page refresh
+        var tr = document.querySelector('tr[data-email="' + _deleteTargetEmail.toLowerCase() + '"]')
+        if (tr) tr.remove()
+      } else {
+        alert("Failed to delete user.")
+      }
+    })
+    .catch(err => {
+      resetBtn(btn, 'Confirm Delete')
+      alert("Error reaching server.")
+    })
   }
 
   /* ── Edit (stub for agent) ───────────────────────────────────── */

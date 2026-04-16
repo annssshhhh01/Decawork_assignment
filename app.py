@@ -80,11 +80,9 @@ FEEDBACK_LOG = "feedback_log.json"
 # ---------------------------------------------------------------------------
 
 _HIGH_RISK_KEYWORDS = [
-    "reset password",
-    "delete user",
-    "remove user",
-    "disable account",
-    "revoke access",
+    "delete",
+    "remove",
+    "erase",
 ]
 
 
@@ -261,6 +259,21 @@ def api_toggle_user():
             u["status"] = "inactive" if u["status"] == "active" else "active"
             _save_users(_ADMIN_USERS)   # <-- write to disk immediately
             return jsonify({"status": "success", "new_status": u["status"]})
+    return jsonify({"error": "not found"}), 404
+
+@app.route("/api/delete_user", methods=["POST"])
+def api_delete_user():
+    """Delete user permanently and PERSIST to disk."""
+    data = request.get_json(force=True, silent=True) or {}
+    email = data.get("email", "").lower().strip()
+    
+    global _ADMIN_USERS
+    initial_length = len(_ADMIN_USERS)
+    _ADMIN_USERS = [u for u in _ADMIN_USERS if u["email"].lower().strip() != email]
+    
+    if len(_ADMIN_USERS) < initial_length:
+        _save_users(_ADMIN_USERS)
+        return jsonify({"status": "success"})
     return jsonify({"error": "not found"}), 404
 
 
