@@ -6,17 +6,10 @@ import InputBar from "./components/InputBar";
 // Progress messages to HIDE (noise from browser-use internals)
 const NOISE_PATTERNS = [
   /^🤖\s*Fetch/i,
-  /^🤖\s*Python/i,
-  /^🤖\s*Bash/i,
-  /^🤖\s*Running Python/i,
-  /^🤖\s*Running:/i,
-  /^🤖\s*Script saved/i,
   /^🤖\s*Now let me/i,
   /^🤖\s*Python failed/i,
   /^🤖\s*Browser Navigate/i,
-  /^🤖\s*Navigating to/i,
   /HTTP \d{3}/,
-  /scripts\//,
   /\.py/,
   /import\s/,
   /result\s*=\s*await/,
@@ -25,19 +18,31 @@ const NOISE_PATTERNS = [
 // Map noisy progress into clean user-facing steps
 function humanizeStep(raw) {
   const t = raw.replace(/^🤖\s*/, "").trim();
+  
   if (/fetch/i.test(t)) return null;
-  if (/python|bash|running|script|import|await|result\s*=/i.test(t)) return null;
+  if (/script saved/i.test(t)) return null;
+  if (/await\s*browser\.evaluate/i.test(t)) return null;
+  
+  // Cache hit execution
+  if (/Running:.*python scripts\//i.test(t)) return "Executing fast automation...";
+  if (/Bash:/i.test(t)) return "Retrieving results...";
+
+  // Standard LLM execution
   if (/navigat/i.test(t)) return "Opening admin panel...";
   if (/search/i.test(t)) return "Searching for user...";
-  if (/click.*disable/i.test(t)) return "Disabling account...";
-  if (/click.*enable/i.test(t)) return "Enabling account...";
+  if (/click.*disable/i.test(t) || /clicked_disable/i.test(t)) return "Disabling account...";
+  if (/click.*enable/i.test(t) || /clicked_enable/i.test(t)) return "Enabling account...";
   if (/click.*reset/i.test(t)) return "Resetting password...";
-  if (/click.*confirm/i.test(t)) return "Confirming action...";
   if (/banner/i.test(t)) return "Reading result...";
+  
   if (/done/i.test(t) || /success/i.test(t)) return "Finishing up...";
+  
   if (NOISE_PATTERNS.some((p) => p.test(raw))) return null;
-  // If it's a clean meaningful message, pass it through
-  if (t.length > 10 && t.length < 200) return t;
+  
+  // If it's a clean meaningful message, pass it through (e.g. Python: clicked_disable)
+  const cleanFormat = t.replace(/^(Python|Bash):\s*/i, "").replace(/['"]/g, "").trim();
+  if (cleanFormat.length > 5 && cleanFormat.length < 50) return cleanFormat;
+  
   return null;
 }
 
