@@ -11,34 +11,34 @@ _WORKSPACE_NAME = "decawork-it-helpdesk"
 
 
 # ---------------------------------------------------------------------------
-# Wrap dynamic values for caching
+# Parameter extraction
 # ---------------------------------------------------------------------------
 
-def wrap_params(task: str) -> str:
-    already_wrapped = set(re.findall(r"@\{\{([^}]+)\}\}", task))
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.\w+\b")
 
-    def wrap_email(m):
-        val = m.group(1)
-        return m.group(0) if val in already_wrapped else f"@{{{{{val}}}}}"
+def extract_email(task: str) -> str | None:
+    """Pull the first email address out of a raw user task string."""
+    m = _EMAIL_RE.search(task)
+    return m.group(0) if m else None
 
-    task = re.sub(r"(?<!@\{\{)(\b[\w.+-]+@[\w.-]+\.\w+)", wrap_email, task)
 
-    def wrap_name(m):
-        val = m.group(0)
-        if val in already_wrapped or len(val) <= 2:
-            return val
+# ---------------------------------------------------------------------------
+# Task type detection
+# ---------------------------------------------------------------------------
 
-        skip = {
-            "Reset", "Create", "Delete", "Assign", "View",
-            "Search", "Remove", "Navigate", "Then", "Find",
-            "Click", "Open", "Wait", "Check", "Show", "List"
-        }
+_TASK_TYPES = {
+    "reset_password": ["reset password", "reset pass", "change password"],
+    "disable_account": ["disable account", "disable user", "disable "],
+    "enable_account":  ["enable account",  "enable user",  "enable "],
+}
 
-        return val if val in skip else f"@{{{{{val}}}}}"
-
-    task = re.sub(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b", wrap_name, task)
-
-    return task
+def detect_task_type(task: str) -> str:
+    """Return a stable task-type key, or 'generic' if no match."""
+    lower = task.lower()
+    for task_type, keywords in _TASK_TYPES.items():
+        if any(kw in lower for kw in keywords):
+            return task_type
+    return "generic"
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,6 @@ async def _get_or_create_workspace(client):
         return _workspace_id
 
     existing = await client.workspaces.list()
-
     for ws in existing.items:
         if getattr(ws, "name", None) == _WORKSPACE_NAME:
             _workspace_id = str(ws.id)
@@ -64,65 +63,73 @@ async def _get_or_create_workspace(client):
 
 
 # ---------------------------------------------------------------------------
-# PROMPT BUILDER — Task + Goal + Strategy + Constraints
+# PROMPT BUILDER — STABLE template + dynamic parameter block only
+#
+# CRITICAL FOR CACHING:
+#   The "Task:" line is ALWAYS identical for the same task type.
+#   Only the parameter block (Target email / Target user) changes.
+#   This lets browser-use match the cached script on every repeated call.
 # ---------------------------------------------------------------------------
 
-def _build_enriched_prompt(task: str, admin_url: str) -> str:
-    lower = task.lower()
-
-    if "reset password" in lower:
-        target = task
-        for prefix in ["reset password for ", "reset password of ", "reset the password for ", "reset pass for "]:
-            if lower.startswith(prefix):
-                target = task[len(prefix):].strip()
-                break
-
+def _build_enriched_prompt(task_type: str, param: str, admin_url: str) -> str:
+    if task_type == "reset_password":
         return (
-            f"Task: Reset password for a user.\n\n"
-            f"Target email: {target}\n\n"
-            f"Goal:\n"
-            f"A green success banner must appear.\n\n"
-            f"Steps:\n"
+            "Task: Reset password for a user.\n\n"
+            f"Target email: {param}\n\n"
+            "Goal:\n"
+            "A green success banner must appear.\n\n"
+            "Steps:\n"
             f"1. Open the admin panel at {admin_url}.\n"
-            f"2. Find the row with the target email (use the 'Search user' input).\n"
-            f"3. Click the 'Reset Password' button in that row.\n"
-            f"4. A modal will appear. Click the confirm button.\n"
-            f"5. Read success banner.\n\n"
-            f"Constraints:\n"
-            f"Return the exact banner text when it appears. If the user is not found in the table, return 'USER_NOT_FOUND'. Do not hallucinate. Only act on visible UI."
+            "2. Click the 'Search user' input and type the target email to filter the table to one row.\n"
+            "3. Click the 'Reset Password' button in that row.\n"
+            "4. A modal will appear — click the confirm button inside it.\n"
+            "5. Wait for the green banner and read its text.\n\n"
+            "Constraints:\n"
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
+            "Do not hallucinate. Only act on visible UI."
         )
 
-    if "disable" in lower or "enable" in lower:
-        target = task
-        for prefix in ["disable account for ", "enable account for ", "disable ", "enable "]:
-            if lower.startswith(prefix):
-                target = task[len(prefix):].strip()
-                break
-
-        action_cmd = "Disable" if "disable" in lower else "Enable"
-        
+    if task_type == "disable_account":
         return (
-            f"Task: {action_cmd} account for a user.\n\n"
-            f"Target email: {target}\n\n"
-            f"Goal:\n"
-            f"A green success banner must appear.\n\n"
-            f"Steps:\n"
+            "Task: Disable account for a user.\n\n"
+            f"Target email: {param}\n\n"
+            "Goal:\n"
+            "A green success banner must appear.\n\n"
+            "Steps:\n"
             f"1. Open the admin panel at {admin_url}.\n"
-            f"2. Find the row with the target email (use the 'Search user' input).\n"
-            f"3. Click the '{action_cmd}' button in that row.\n"
-            f"4. Read success banner.\n\n"
-            f"Constraints:\n"
-            f"Return the exact banner text when it appears. If the user is not found, return 'USER_NOT_FOUND'. Do not hallucinate. Only act on visible UI."
+            "2. Click the 'Search user' input and type the target email to filter the table to one row.\n"
+            "3. Click the 'Disable' button in that row.\n"
+            "4. Wait for the green banner and read its text.\n\n"
+            "Constraints:\n"
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
+            "Do not hallucinate. Only act on visible UI."
         )
 
+    if task_type == "enable_account":
+        return (
+            "Task: Enable account for a user.\n\n"
+            f"Target email: {param}\n\n"
+            "Goal:\n"
+            "A green success banner must appear.\n\n"
+            "Steps:\n"
+            f"1. Open the admin panel at {admin_url}.\n"
+            "2. Click the 'Search user' input and type the target email to filter the table to one row.\n"
+            "3. Click the 'Enable' button in that row.\n"
+            "4. Wait for the green banner and read its text.\n\n"
+            "Constraints:\n"
+            "Return the exact banner text. If the user is not found, return 'USER_NOT_FOUND'. "
+            "Do not hallucinate. Only act on visible UI."
+        )
+
+    # generic fallback — param is the raw task string
     return (
-        f"Task: Execute requested objective.\n\n"
-        f"Objective parameter: {task}\n\n"
-        f"Steps:\n"
+        "Task: Execute requested objective.\n\n"
+        f"Objective: {param}\n\n"
+        "Steps:\n"
         f"1. Open {admin_url}.\n"
-        f"2. Complete the objective visually.\n\n"
-        f"Constraints:\n"
-        f"Return the result text visible on screen after completing the task. Do not hallucinate. Only act on visible UI."
+        "2. Complete the objective visually.\n\n"
+        "Constraints:\n"
+        "Return the result text visible on screen. Do not hallucinate. Only act on visible UI."
     )
 
 
@@ -137,9 +144,13 @@ async def run_task(task: str, on_progress=None) -> dict:
 
     ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:5000/admin")
 
-    parameterized_task = wrap_params(task)
-    prompt = _build_enriched_prompt(parameterized_task, ADMIN_URL)
-    prompt = prompt.strip()
+    task_type = detect_task_type(task)
+    email     = extract_email(task)
+    param     = email if email else task   # generic fallback uses raw task
+
+    prompt = _build_enriched_prompt(task_type, param, ADMIN_URL).strip()
+
+    print(f"task_type={task_type}  param={param}")
 
     client = AsyncBrowserUse()
 
