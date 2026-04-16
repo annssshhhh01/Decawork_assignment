@@ -79,41 +79,58 @@ def detect_task_type(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 class ParseError(ValueError):
-    """Raised when input cannot be safely parsed into a clean (task_type, param)."""
+    """Raised when input cannot be safely parsed into a clean (task_type, email)."""
+
 
 def parse_input(raw: str) -> tuple[str, str]:
     """
     Convert free-form user input into a (task_type, clean_email) pair.
 
-    CONTRACT:
-      - The raw sentence is DISCARDED here — it NEVER reaches the prompt builder.
-      - For action tasks (disable/enable/reset) an email is REQUIRED.
-        If no clean email is found, ParseError is raised and the LLM is NOT called.
-      - 'param' returned is ONLY the extracted email — no surrounding words.
+    CONTRACT — strictly enforced:
+      - raw is consumed HERE and deleted before returning.
+      - For ALL action tasks, a valid email is REQUIRED or ParseError is raised.
+      - param returned is ONLY a bare email address — no surrounding words.
+      - The LLM is NEVER called if this function raises.
     """
+    # Step 1 — detect intent from raw (keyword only, no prose passed forward)
     task_type = detect_task_type(raw)
-    email     = extract_email(raw)
 
-    # ── Debug audit (logged before any validation) ────────────────────────
+    # Step 2 — extract email via regex (regex is the ONLY source of truth)
+    _raw_match = _EMAIL_RE.search(raw)
+    email: str | None = None
+    if _raw_match:
+        _candidate = _raw_match.group(0).strip().lower()  # strip + lowercase
+        # Triple-validate: fullmatch ensures no trailing/leading junk
+        if _EMAIL_RE.fullmatch(_candidate) and "@" in _candidate and " " not in _candidate:
+            email = _candidate
+
+    # Step 3 — DEBUG (printed BEFORE validation so we can diagnose failures)
     print(f"\n[PARSE] RAW INPUT      : {raw}")
     print(f"[PARSE] TASK TYPE      : {task_type}")
     print(f"[PARSE] EXTRACTED EMAIL: {email}")
-    # ─────────────────────────────────────────────────────────────────────
 
+    # Step 4 — DELETE raw so it CANNOT leak further
+    del raw
+
+    # Step 5 — enforce requirements
     if task_type in _ACTION_TYPES:
-        if not email:
+        if email is None:
             raise ParseError(
-                f"No valid email found in input for task type '{task_type}'. "
-                "Please include an email address."
+                f"Could not find a valid email address for action '{task_type}'. "
+                "Please include an email address (e.g. john@company.com)."
             )
-        # Sanity assertion: param must be a bare email, no spaces, no prose
+        # Hard assertions — these should never fire if regex is correct,
+        # but they act as a tripwire to catch any future regression.
+        assert "@" in email,     f"[BUG] email missing @: {email!r}"
         assert " " not in email, f"[BUG] email contains spaces: {email!r}"
+        assert len(email) > 3,   f"[BUG] email too short to be valid: {email!r}"
         param = email
     else:
-        # Generic task — param is the raw task text (no email required)
-        param = raw.strip()
+        # Generic: no email required, but raw is already deleted.
+        # Pass an empty string — the generic prompt doesn't use an email param.
+        param = email if email else ""
 
-    print(f"[PARSE] FINAL PARAM    : {param}")
+    print(f"[PARSE] FINAL PARAM    : {param!r}")
     return task_type, param
 
 
@@ -147,11 +164,21 @@ async def _get_or_create_workspace(client):
 #   This lets browser-use match the cached script on every repeated call.
 # ---------------------------------------------------------------------------
 
-def _build_enriched_prompt(task_type: str, param: str, admin_url: str) -> str:
+def _build_enriched_prompt(task_type: str, email: str, admin_url: str) -> str:
+    """
+    Build a fully static prompt.
+    'email' must already be a clean, validated email address.
+    This function ONLY inserts it into the 'Target email:' line.
+    """
+    # Guard: reject obviously dirty params before they enter the prompt
+    if task_type in _ACTION_TYPES:
+        assert email and "@" in email, f"[BUG] dirty email reached prompt builder: {email!r}"
+        assert " " not in email,       f"[BUG] email has spaces: {email!r}"
+
     if task_type == "reset_password":
         return (
             "Task: Reset password for a user.\n\n"
-            f"Target email: {param}\n\n"
+            f"Target email: {email}\n\n"
             "Goal:\n"
             "A green success banner must appear.\n\n"
             "Steps:\n"
@@ -168,7 +195,7 @@ def _build_enriched_prompt(task_type: str, param: str, admin_url: str) -> str:
     if task_type == "disable_account":
         return (
             "Task: Disable account for a user.\n\n"
-            f"Target email: {param}\n\n"
+            f"Target email: {email}\n\n"
             "Goal:\n"
             "A green success banner must appear.\n\n"
             "Steps:\n"
@@ -184,7 +211,7 @@ def _build_enriched_prompt(task_type: str, param: str, admin_url: str) -> str:
     if task_type == "enable_account":
         return (
             "Task: Enable account for a user.\n\n"
-            f"Target email: {param}\n\n"
+            f"Target email: {email}\n\n"
             "Goal:\n"
             "A green success banner must appear.\n\n"
             "Steps:\n"
@@ -197,13 +224,12 @@ def _build_enriched_prompt(task_type: str, param: str, admin_url: str) -> str:
             "Do not hallucinate. Only act on visible UI."
         )
 
-    # generic fallback — param is the raw task string
+    # Generic fallback — no user prose injected; admin_url only
     return (
-        "Task: Execute requested objective.\n\n"
-        f"Objective: {param}\n\n"
+        "Task: Show all users on the admin panel.\n\n"
         "Steps:\n"
         f"1. Open {admin_url}.\n"
-        "2. Complete the objective visually.\n\n"
+        "2. Read and return the list of all visible users.\n\n"
         "Constraints:\n"
         "Return the result text visible on screen. Do not hallucinate. Only act on visible UI."
     )
@@ -237,6 +263,17 @@ async def run_task(task: str, on_progress=None) -> dict:
     # ────────────────────────────────────────────────────────────────────────
 
     prompt = _build_enriched_prompt(task_type, param, ADMIN_URL).strip()
+
+    # ── Pre-send prompt assertions — final tripwire before LLM ─────────────
+    _LEAK_WORDS = {"this", "please", "can you", "account for '", "this account"}
+    for _bad in _LEAK_WORDS:
+        assert _bad not in prompt.lower(), (
+            f"[BUG] Prompt contains leaked prose word '{_bad}'.\n"
+            f"PROMPT:\n{prompt}"
+        )
+    if task_type in _ACTION_TYPES:
+        assert "@" in prompt, "[BUG] Action prompt missing email."
+    # ────────────────────────────────────────────────────────────────────────
 
     # ── Prompt stability audit ───────────────────────────────────────────────
     prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
